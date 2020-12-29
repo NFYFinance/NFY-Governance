@@ -146,6 +146,8 @@ contract GovernorAlpha {
     ) public {
         timelock = TimelockInterface(timelock_);
         guardian = guardian_;
+        nfy = IERC20(_nfy);
+        nft = IERC721(_nft);
     }
 
     function propose(
