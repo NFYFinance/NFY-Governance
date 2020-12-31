@@ -15,12 +15,12 @@ contract GovernorAlpha {
 
     /// @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
     function quorumVotes() public pure returns (uint256) {
-        return 400000e18;
+        return 100e18;
     } // 400,000 = 4% of Comp
 
     /// @notice The number of votes required in order for a voter to become a proposer
     function proposalThreshold() public pure returns (uint256) {
-        return 100000e18;
+        return 10e18;
     } // 100,000 = 1% of Comp
 
     /// @notice The maximum number of actions that can be included in a proposal
@@ -35,7 +35,7 @@ contract GovernorAlpha {
 
     /// @notice The duration of voting on a proposal, in blocks
     function votingPeriod() public pure returns (uint256) {
-        return 17280;
+        return 10;
     } // ~3 days in blocks (assuming 15s blocks)
 
     /// @notice The address of the Compound Protocol Timelock
@@ -145,9 +145,76 @@ contract GovernorAlpha {
         address _stake
     ) public {
         timelock = TimelockInterface(timelock_);
-        guardian = guardian_;
         nfy = IERC20(_nfy);
         nft = IERC721(_nft);
+        stake = StakeInterface(_stake);
+        guardian = guardian_;
+    }
+
+    function depositToken(uint256 amount) external {
+        require(
+            nfy.balanceOf(msg.sender) >= amount,
+            "Do not have enough NFY to deposit"
+        );
+        nfy.transferFrom(msg.sender, address(this), amount);
+        userDetails[msg.sender].votePower = userDetails[msg.sender]
+            .votePower
+            .add(amount);
+        userDetails[msg.sender].tokenRecord = userDetails[msg.sender]
+            .tokenRecord
+            .add(amount);
+    }
+
+    function withdrawToken(uint256 amount) external {
+        require(
+            userDetails[msg.sender].tokenRecord >= amount,
+            "Do not have enough NFY to withdraw"
+        );
+        require(
+            userDetails[msg.sender].tokenLocker < block.number,
+            "cannot withdraw until voting on voted proposal is done"
+        );
+        nfy.transfer(msg.sender, amount);
+        userDetails[msg.sender].tokenRecord = userDetails[msg.sender]
+            .tokenRecord
+            .sub(amount);
+        userDetails[msg.sender].votePower = userDetails[msg.sender]
+            .votePower
+            .sub(amount);
+    }
+
+    function depositStakedToken(uint256 nftId) external {
+        require(
+            stake.NFTDetails(nftId)._addressOfMinter == msg.sender,
+            "Owner of token is not user"
+        );
+        nft.transferFrom(msg.sender, address(this), nftId);
+        userDetails[msg.sender].votePower = userDetails[msg.sender]
+            .votePower
+            .add(stake.NFTDetails(nftId)._NFYDeposited);
+        userDetails[msg.sender].stakeRecord = userDetails[msg.sender]
+            .stakeRecord
+            .add(stake.NFTDetails(nftId)._NFYDeposited);
+    }
+
+    function withdrawStakedToken(uint256 nftId) external {
+        require(
+            stake.NFTDetails(nftId)._addressOfMinter == msg.sender,
+            "Owner of token is not user"
+        );
+        require(
+            userDetails[msg.sender].tokenLocker < block.number,
+            "cannot withdraw until voting on voted proposal is done"
+        );
+        require(
+            userDetails[msg.sender].stakeRecord > 0,
+            "user has no stake in contract"
+        );
+        nft.transferFrom(address(this), msg.sender, nftId);
+        userDetails[msg.sender].votePower = userDetails[msg.sender]
+            .votePower
+            .sub(stake.NFTDetails(nftId)._NFYDeposited);
+        userDetails[msg.sender].stakeRecord = 0;
     }
 
     function propose(
@@ -157,6 +224,10 @@ contract GovernorAlpha {
         bytes[] memory calldatas,
         string memory description
     ) public returns (uint256) {
+        require(
+            userDetails[msg.sender].votePower > proposalThreshold(),
+            "GovernorAlpha::propose: proposer votes below proposal threshold"
+        );
         require(
             targets.length == values.length &&
                 targets.length == signatures.length &&
@@ -378,6 +449,8 @@ contract GovernorAlpha {
             receipt.hasVoted == false,
             "GovernorAlpha::_castVote: voter already voted"
         );
+        uint256 votes = userDetails[msg.sender].votePower;
+        userDetails[msg.sender].tokenLocker = block.number.add(17280);
 
         if (support) {
             proposal.forVotes = add256(proposal.forVotes, votes);
@@ -486,4 +559,15 @@ interface TimelockInterface {
         bytes calldata data,
         uint256 eta
     ) external payable returns (bytes memory);
+}
+
+interface StakeInterface {
+    struct NFT {
+        address _addressOfMinter;
+        uint256 _NFYDeposited;
+        bool _inCirculation;
+        uint256 _rewardDebt;
+    }
+
+    function NFTDetails(uint256 nftId) external view returns (NFT memory);
 }
