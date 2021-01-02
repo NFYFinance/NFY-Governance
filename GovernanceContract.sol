@@ -15,13 +15,13 @@ contract GovernorAlpha {
 
     /// @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
     function quorumVotes() public pure returns (uint256) {
-        return 100e18;
-    } // 400,000 = 4% of Comp
+        return 40e18;
+    } // 40 = 0.04% of NFY
 
     /// @notice The number of votes required in order for a voter to become a proposer
     function proposalThreshold() public pure returns (uint256) {
         return 10e18;
-    } // 100,000 = 1% of Comp
+    } // 10 = 0.01% of NFY
 
     /// @notice The maximum number of actions that can be included in a proposal
     function proposalMaxOperations() public pure returns (uint256) {
@@ -35,10 +35,10 @@ contract GovernorAlpha {
 
     /// @notice The duration of voting on a proposal, in blocks
     function votingPeriod() public pure returns (uint256) {
-        return 10;
+        return 3;
     } // ~3 days in blocks (assuming 15s blocks)
 
-    /// @notice The address of the Compound Protocol Timelock
+    /// @notice The address of the NFY Protocol Timelock
     TimelockInterface public timelock;
 
     /// @notice The address of the NFY governance token
