@@ -10,38 +10,50 @@ import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contr
 contract GovernorAlpha {
     using SafeMath for uint256;
 
+    /// @notice The name of this contract
     string public constant name = "NFY Governor Alpha";
 
+    /// @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
     function quorumVotes() public pure returns (uint256) {
         return 40e18;
     } // 40 = 0.04% of NFY
 
+    /// @notice The number of votes required in order for a voter to become a proposer
     function proposalThreshold() public pure returns (uint256) {
         return 10e18;
     } // 10 = 0.01% of NFY
 
+    /// @notice The maximum number of actions that can be included in a proposal
     function proposalMaxOperations() public pure returns (uint256) {
         return 10;
     } // 10 actions
 
+    /// @notice The delay before voting on a proposal may take place, once proposed
     function votingDelay() public pure returns (uint256) {
         return 1;
     } // 1 block
 
+    /// @notice The duration of voting on a proposal, in blocks
     function votingPeriod() public pure returns (uint256) {
         return 3;
     } // ~3 days in blocks (assuming 15s blocks)
 
+    /// @notice The address of the NFY Protocol Timelock
     TimelockInterface public timelock;
 
+    /// @notice The address of the NFY governance token
     IERC20 public nfy;
 
+    /// @notice The address of the NFT token
     IERC721 public nft;
 
+    /// @notice The address of the NFY Staking token
     StakeInterface public stake;
 
+    /// @notice The address of the Governor Guardian
     address public guardian;
 
+    /// @notice The total number of proposals
     uint256 public proposalCount;
 
     struct Proposal {
@@ -61,12 +73,14 @@ contract GovernorAlpha {
         mapping(address => Receipt) receipts;
     }
 
+    /// @notice Ballot receipt record for a voter
     struct Receipt {
         bool hasVoted;
         bool support;
         uint256 votes;
     }
 
+    /// @notice Possible states that a proposal may be in
     enum ProposalState {
         Pending,
         Active,
@@ -85,12 +99,17 @@ contract GovernorAlpha {
         uint256 tokenRecord;
     }
 
+    /// @notice The official record of all proposals ever proposed
     mapping(uint256 => Proposal) public proposals;
 
+    /// @notice The latest proposal for each proposer
     mapping(address => uint256) public latestProposalIds;
 
     mapping(address => UserInfo) public userDetails;
 
+    mapping(uint256 => address) stakedIdInfo;
+
+    /// @notice An event emitted when a new proposal is created
     event ProposalCreated(
         uint256 id,
         address proposer,
@@ -103,6 +122,7 @@ contract GovernorAlpha {
         string description
     );
 
+    /// @notice An event emitted when a vote has been cast on a proposal
     event VoteCast(
         address voter,
         uint256 proposalId,
@@ -110,10 +130,13 @@ contract GovernorAlpha {
         uint256 votes
     );
 
+    /// @notice An event emitted when a proposal has been canceled
     event ProposalCanceled(uint256 id);
 
+    /// @notice An event emitted when a proposal has been queued in the Timelock
     event ProposalQueued(uint256 id, uint256 eta);
 
+    /// @notice An event emitted when a proposal has been executed in the Timelock
     event ProposalExecuted(uint256 id);
 
     constructor(
@@ -163,10 +186,8 @@ contract GovernorAlpha {
     }
 
     function depositStakedToken(uint256 nftId) external {
-        require(
-            stake.NFTDetails(nftId)._addressOfMinter == msg.sender,
-            "Owner of token is not user"
-        );
+        require(nft.ownerOf(nftId) == msg.sender, "Owner of token is not user");
+        stakedIdInfo[nftId] = msg.sender;
         nft.transferFrom(msg.sender, address(this), nftId);
         userDetails[msg.sender].votePower = userDetails[msg.sender]
             .votePower
@@ -178,7 +199,7 @@ contract GovernorAlpha {
 
     function withdrawStakedToken(uint256 nftId) external {
         require(
-            stake.NFTDetails(nftId)._addressOfMinter == msg.sender,
+            stakedIdInfo[nftId] == msg.sender,
             "Owner of token is not user"
         );
         require(
