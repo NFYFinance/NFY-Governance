@@ -144,9 +144,11 @@ contract("NFYStaking", async (accounts) => {
          it('should transfer timelock admin to governance contract address', async () => {
             const timeAddressBefore = await time.admin();
             assert.strictEqual(timeAddressBefore, owner);
+
             let delay = await time.delay();
             let blockTime = await time.getBlockTimestamp()
             let eta = Number(blockTime) + Number(delay);
+            
             await time.queueTransaction(
                time.address,
                0,
@@ -168,7 +170,7 @@ contract("NFYStaking", async (accounts) => {
             )
          
             await gov.__acceptAdmin({from:owner});
-            
+
             const timeAddressAfter = await time.admin();
             assert.strictEqual(timeAddressAfter, gov.address);
          })
