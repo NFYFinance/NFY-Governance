@@ -101,9 +101,6 @@ contract("NFYStaking", async (accounts) => {
         await nfyStaking.transferOwnership(gov.address);
      });
 
-     
-
-
      describe("# stakeNFY()", () => {
 
         it('should let a user stake', async () => {
@@ -148,7 +145,7 @@ contract("NFYStaking", async (accounts) => {
             let delay = await time.delay();
             let blockTime = await time.getBlockTimestamp()
             let eta = Number(blockTime) + Number(delay);
-            
+
             await time.queueTransaction(
                time.address,
                0,
