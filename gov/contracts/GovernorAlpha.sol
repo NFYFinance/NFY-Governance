@@ -35,7 +35,7 @@ contract GovernorAlpha {
 
     /// @notice The duration of voting on a proposal, in blocks
     function votingPeriod() public pure returns (uint256) {
-        return 3;
+        return 10;
     } // ~3 days in blocks (assuming 15s blocks)
 
     /// @notice The address of the NFY Protocol Timelock
@@ -450,7 +450,7 @@ contract GovernorAlpha {
             "GovernorAlpha::_castVote: voter already voted"
         );
         uint256 votes = userDetails[msg.sender].votePower;
-        userDetails[msg.sender].tokenLocker = block.number.add(17280);
+        userDetails[msg.sender].tokenLocker = block.number.add(7);
 
         if (support) {
             proposal.forVotes = add256(proposal.forVotes, votes);

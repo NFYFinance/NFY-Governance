@@ -7,8 +7,9 @@ const truffleAssert = require("truffle-assertions");
 const RewardPool = artifacts.require("RewardPool");
 const helper = require('../utils/utils.js');
 const ethers = require('ethers');
+const { async } = require("q");
 
-contract("NFYStaking", async (accounts) => {
+contract("NFY Governance Contract", async (accounts) => {
 
    let owner;
    let rewardPool;
@@ -27,15 +28,6 @@ contract("NFYStaking", async (accounts) => {
    function encodeParameters(types, values) {
    const abi = new ethers.utils.AbiCoder();
    return abi.encode(types, values);
-   }
-
-   async function rpc(request) {
-   return new Promise((okay, fail) => web3.currentProvider.send(request, (err, res) => err ? fail(err) : okay(res)));
-   }
-
-   async function advanceBlocks(blocks) {
-   let { result: num } = await rpc({ method: 'eth_blockNumber' });
-   await rpc({ method: 'evm_mineBlockNumber', params: [blocks + parseInt(num)] });
    }
 
    before(async () => {
@@ -88,10 +80,6 @@ contract("NFYStaking", async (accounts) => {
 
       time = await Time.new(owner,10);
       gov = await Gov.new(time.address,token.address,owner,nfyStakingNFT.address,nfyStaking.address);
-
-      // Transfer ownership to secured secured account
-      await nfyStakingNFT.transferOwnership(gov.address);
-      await nfyStaking.transferOwnership(gov.address);
 
       await token.approve(nfyStaking.address, allowance, {from: user});
       await nfyStaking.stakeNFY(stakeAmount, {from: user});
@@ -270,7 +258,7 @@ contract("NFYStaking", async (accounts) => {
             {from:owner}
          )
 
-         await helper.advanceTime(2000);
+         await helper.advanceTime(20);
 
          await time.executeTransaction(
             time.address,
@@ -291,10 +279,12 @@ contract("NFYStaking", async (accounts) => {
 
    describe("Create Proposal", () => {
 
-      it('should create a proposal', async () => {
+      beforeEach(async () => {
          await token.approve(gov.address, allowance, {from: user2});
          await gov.depositToken(initialBalance, {from: user2});
+      })
 
+      it('should create a proposal', async () => {
          await gov.propose(
             [nfyStaking.address],
             [0],
@@ -308,6 +298,322 @@ contract("NFYStaking", async (accounts) => {
          const proposalInfo = await gov.getActions(id);
 
          assert.strictEqual(proposalInfo.targets[0], nfyStaking.address);
+      })
+
+      it('should revert if user voting power is below proposalThreshold', async () => {
+         await token.approve(gov.address, allowance, {from: user3});
+         await gov.depositToken(stakeAmount, {from: user3});
+
+         await truffleAssert.reverts(gov.propose(
+            [nfyStaking.address],
+            [0],
+            ['setDailyReward(uint256)'],
+            [encodeParameters(['uint256'], [200])],
+            'change daily reward',
+            {from:user3}
+         ))
+      })
+
+      it('should revert if parameter array length are not equal', async () => {
+         await truffleAssert.reverts(gov.propose(
+            [nfyStaking.address],
+            [0,0],
+            ['setDailyReward(uint256)'],
+            [encodeParameters(['uint256'], [200])],
+            'change daily reward',
+            {from:user2}
+         ))
+      })
+
+      it('should revert if parameter array length is equal to 0', async () => {
+         await truffleAssert.reverts(gov.propose(
+            [],
+            [],
+            [],
+            [],
+            'change daily reward',
+            {from:user2}
+         ))
+
+      })
+
+   })
+
+   describe("Voting", () => {
+
+      beforeEach(async () => {
+         await token.faucet(user, initialBalance);
+
+         await token.approve(gov.address, allowance, {from: user2});
+         await gov.depositToken(initialBalance, {from: user2});
+
+         await token.approve(gov.address, allowance, {from: user3});
+         await gov.depositToken(initialBalance, {from: user3});
+
+         await token.approve(gov.address, allowance, {from: user});
+         await gov.depositToken(initialBalance, {from: user});
+
+         await gov.propose(
+            [nfyStaking.address],
+            [0],
+            ['setDailyReward(uint256)'],
+            [encodeParameters(['uint256'], [200])],
+            'change daily reward',
+            {from:user2}
+         )
+
+         await helper.advanceBlock()
+         await helper.advanceBlock()
+         
+      })
+
+      it('should let users vote on a proposal', async () => {
+
+         await gov.castVote(1,true, {from:user});
+         await gov.castVote(1,true, {from:user2});
+         await gov.castVote(1,false, {from:user3});
+
+         const tokensFromTwoVoters = initialBalance * 2;
+
+         const id = await gov.latestProposalIds(user2);
+         const proposalInfo = await gov.proposals(id);
+
+         assert.strictEqual(BigInt(proposalInfo.forVotes).toString(),BigInt(tokensFromTwoVoters).toString());
+         assert.strictEqual(BigInt(proposalInfo.againstVotes).toString(),initialBalance.toString());
+      })
+
+      it('proposal should be a success', async () => {
+
+         await gov.castVote(1,true, {from:user});
+         await gov.castVote(1,true, {from:user2});
+         await gov.castVote(1,false, {from:user3});
+
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         const success = '4'
+         const returedState = await gov.state(1);
+
+         assert.strictEqual(success,returedState.toString());
+
+      })
+
+      it('proposal should be defeated', async () => {
+
+         await gov.castVote(1,true, {from:user});
+         await gov.castVote(1,false, {from:user2});
+         await gov.castVote(1,false, {from:user3});
+
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         const success = '3'
+         const returedState = await gov.state(1);
+
+         assert.strictEqual(success,returedState.toString());
+
+      })
+
+      it('should revert if user wants to vote more than once', async () => {
+
+         await gov.castVote(1,true, {from:user});
+
+         await truffleAssert.reverts(gov.castVote(1,true, {from: user}))
+      })
+
+      it('should revert if user wants to withdraw demo token while voted proposal is still active', async () => {
+         await gov.castVote(1,true, {from:user2});
+
+         await truffleAssert.reverts(gov.withdrawToken(initialBalance, {from: user2}))
+      })
+
+      it('should let user withdraw demo token after voted proposal has ended', async () => {
+         await gov.castVote(1,true, {from:user2});
+
+         for(let i = 0; i < 8; i++){
+            await helper.advanceBlock()
+         }
+         const balBefore = BigInt(await token.balanceOf(user2)).toString()
+         assert.strictEqual('0',balBefore);
+
+         await gov.withdrawToken(initialBalance, {from: user2})
+
+         const balAfter = BigInt(await token.balanceOf(user2)).toString()
+         assert.strictEqual(initialBalance.toString(),balAfter);
+
+         const amountDepositedAfter = await gov.userDetails(user2);
+         assert.strictEqual(amountDepositedAfter.tokenRecord.toString(), '0')
+      })
+
+   })
+
+   describe("Queuing & Excuting Proposal", () => {
+
+      beforeEach(async () => {
+         let delay = 12;
+         let blockTime = await time.getBlockTimestamp()
+         let eta = Number(blockTime) + Number(delay);
+         
+         await time.queueTransaction(
+            time.address,
+            0,
+            'setPendingAdmin(address)',
+            encodeParameters(['address'], [gov.address]),
+            eta,
+            {from:owner}
+         )
+
+         await helper.advanceTime(20);
+
+         await time.executeTransaction(
+            time.address,
+            0,
+            'setPendingAdmin(address)',
+            encodeParameters(['address'], [gov.address]),
+            eta,
+            {from:owner}
+         )
+      
+         await gov.__acceptAdmin({from:owner});
+
+         await token.faucet(user, initialBalance);
+
+         await token.approve(gov.address, allowance, {from: user2});
+         await gov.depositToken(initialBalance, {from: user2});
+
+         await token.approve(gov.address, allowance, {from: user3});
+         await gov.depositToken(initialBalance, {from: user3});
+
+         await token.approve(gov.address, allowance, {from: user});
+         await gov.depositToken(initialBalance, {from: user});
+
+         await gov.propose(
+            [nfyStaking.address],
+            [0],
+            ['setDailyReward(uint256)'],
+            [encodeParameters(['uint256'], [200])],
+            'change daily reward',
+            {from:user2}
+         )
+
+         await helper.advanceBlock()
+         await helper.advanceBlock()
+
+         await gov.castVote(1,true, {from:user});
+         await gov.castVote(1,true, {from:user2});
+         await gov.castVote(1,false, {from:user3});
+         
+      })
+
+      it('should revert queue if proposal has not ended', async () =>{
+         await truffleAssert.reverts( gov.queue(1));
+      })
+
+      it('should successfully queue a proposal', async () =>{
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         await gov.queue(1);
+
+         const queued = '5'
+         const returedState = await gov.state(1);
+
+         assert.strictEqual(queued,returedState.toString());
+      })
+
+      it('should not cancel queued proposal if call is not coming from guardian', async () => {
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         await gov.queue(1);
+         await truffleAssert.reverts(gov.cancel(1, {from:user}));
+      })
+
+      it('should cancel queued proposal', async () => {
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         await gov.queue(1);
+         await gov.cancel(1, {from:owner});
+
+         const canceled = '2'
+         const returedState = await gov.state(1);
+
+         assert.strictEqual(canceled,returedState.toString());
+
+      })
+
+      it('should revert when executing proposal if staking contract owner is not timelock contract addr. ', async () => {
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         await gov.queue(1);
+
+         await truffleAssert.reverts(gov.execute(1));
+
+      })
+
+      it('should execute proposal ', async () => {
+         await nfyStaking.transferOwnership(time.address);
+
+         const dailyRewardBefore = await nfyStaking.dailyReward();
+         assert.strictEqual('10',dailyRewardBefore.toString());
+
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         await gov.queue(1);
+
+         await helper.advanceTime(20);
+
+         await gov.execute(1);
+
+         const executed = '7'
+         const returedState = await gov.state(1);
+
+         assert.strictEqual(executed,returedState.toString());
+
+         const dailyRewardAfter = await nfyStaking.dailyReward();
+         assert.strictEqual('200',dailyRewardAfter.toString());
+      })
+
+      it('should not cancel proposal if proposal has bee executed', async () => {
+         await nfyStaking.transferOwnership(time.address);
+
+         const loop = await gov.votingPeriod();
+
+         for(let i = 0; i < loop; i++){
+            await helper.advanceBlock()
+         }
+
+         await gov.queue(1);
+
+         await helper.advanceTime(20);
+
+         await gov.execute(1);
+
+         await truffleAssert.reverts(gov.cancel(1, {from:owner}));
       })
 
    })
