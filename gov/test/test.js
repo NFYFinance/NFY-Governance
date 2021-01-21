@@ -7,7 +7,6 @@ const truffleAssert = require("truffle-assertions");
 const RewardPool = artifacts.require("RewardPool");
 const helper = require('../utils/utils.js');
 const ethers = require('ethers');
-const { async } = require("q");
 
 contract("NFY Governance Contract", async (accounts) => {
 
