@@ -41,7 +41,7 @@ contract("NFY Governance Contract", async (accounts) => {
 
       user4 = accounts[6];
 
-      initialBalanceBefore = 1000
+      initialBalanceBefore = 1000;
       allowanceBefore = 2000;
       stakeAmountBefore = 5;
       moreThanBalanceBefore = 1005;
