@@ -71,6 +71,7 @@ contract GovernorAlpha {
         bool canceled;
         bool executed;
         mapping(address => Receipt) receipts;
+        string message;
     }
 
     /// @notice Ballot receipt record for a voter
@@ -275,7 +276,8 @@ contract GovernorAlpha {
                 forVotes: 0,
                 againstVotes: 0,
                 canceled: false,
-                executed: false
+                executed: false,
+                message: description
             });
 
         proposals[newProposal.id] = newProposal;
