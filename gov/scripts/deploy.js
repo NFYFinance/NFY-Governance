@@ -27,3 +27,5 @@ main()
     console.error(error);
     process.exit(1);
 })
+
+//npx hardhat run --network kovan scripts/deploy.js
