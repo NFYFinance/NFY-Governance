@@ -26,7 +26,7 @@ contract GovernorAlpha {
     /// @notice The maximum number of actions that can be included in a proposal
     function proposalMaxOperations() public pure returns (uint256) {
         return 5;
-    } // 10 actions
+    } // 5 actions
 
     /// @notice The delay before voting on a proposal may take place, once proposed
     function votingDelay() public pure returns (uint256) {
