@@ -15,7 +15,7 @@ contract GovernorAlpha {
 
     /// @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
     function quorumVotes() public pure returns (uint256) {
-        return 3500e18;
+        return 35000e18;
     } 
 
     /// @notice The number of votes required in order for a voter to become a proposer
